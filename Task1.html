@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PlanetPulse — Environmental News Dashboard</title>
+  <!-- Chart.js for trend visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Color palette: teal, green, blue */
+    :root{
+      --teal-700: #0f766e;
+      --teal-500: #14b8a6;
+      --green-500: #16a34a;
+      --blue-600: #2563eb;
+      --bg: #f6fbfb;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --glass: rgba(255,255,255,0.6);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background: linear-gradient(180deg,var(--bg), #eef9f8);
+      color:#0f172a; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    }
+    header{
+      background: linear-gradient(90deg,var(--teal-700), var(--blue-600));
+      color:white; padding:18px 24px; display:flex; align-items:center; gap:16px;
+    }
+    .logo{
+      display:flex; align-items:center; gap:12px; font-weight:700; font-size:1.15rem;
+    }
+    .logo .mark{width:44px; height:44px; border-radius:10px; display:grid; place-items:center; background:linear-gradient(135deg,var(--teal-500),var(--blue-600)); box-shadow:0 6px 18px rgba(20,184,166,0.18);}
+    .container{max-width:1200px; margin:24px auto; padding:0 16px;}
+
+    /* Layout */
+    .grid{display:grid; grid-template-columns: 320px 1fr; gap:20px; align-items:start}
+
+    /* Sidebar */
+    aside.card{background:var(--card); padding:16px; border-radius:12px; box-shadow:0 6px 18px rgba(15,118,110,0.06)}
+    .search{display:flex; gap:8px}
+    .search input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid #e6eef0}
+    .filters{margin-top:12px; display:flex; flex-direction:column; gap:8px}
+    .category{padding:8px 10px; border-radius:8px; cursor:pointer; border:1px solid transparent}
+    .category.active{background:linear-gradient(90deg,var(--teal-500),var(--blue-600)); color:white; border-color:rgba(0,0,0,0.06)}
+    .small{font-size:0.9rem; color:var(--muted)}
+
+    /* Main */
+    .controls{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
+    .controls .left{display:flex; gap:8px; align-items:center}
+    .btn{background:var(--teal-500); color:white; padding:8px 12px; border-radius:10px; border:none; cursor:pointer}
+    .btn.secondary{background:transparent; color:var(--teal-700); border:1px solid #d6f5ef}
+
+    .articles{display:flex; flex-direction:column; gap:12px}
+    .article{display:flex; gap:12px; background:var(--card); padding:12px; border-radius:12px; box-shadow:0 6px 14px rgba(2,6,23,0.04)}
+    .thumb{width:120px; min-width:120px; height:80px; border-radius:8px; background-size:cover; background-position:center}
+    .meta{flex:1}
+    .meta h3{margin:0 0 6px 0; font-size:1.05rem}
+    .meta p{margin:0 0 8px 0; color:var(--muted)}
+    .meta .metafoot{display:flex; gap:8px; align-items:center; font-size:0.85rem; color:var(--muted)}
+    .chip{padding:4px 8px; border-radius:999px; font-size:0.8rem; background:#f0fdf4; color:var(--green-500)}
+
+    /* Bookmark star */
+    .star{cursor:pointer; font-size:1.2rem; color:var(--muted)}
+    .star.saved{color:gold}
+
+    /* Chart card */
+    .chartcard{padding:12px; border-radius:12px; background:linear-gradient(180deg, rgba(20,184,166,0.06), rgba(37,99,235,0.02));}
+
+    /* Responsive */
+    @media (max-width:880px){
+      .grid{grid-template-columns:1fr;}
+      .thumb{width:100px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <div class="mark">🌍</div>
+      <div>
+        PlanetPulse <div style="font-weight:400;font-size:0.8rem;opacity:0.95">Environmental news & insights</div>
+      </div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <button class="btn secondary" id="toggleTheme">Theme</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <aside class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700">Explore</div>
+            <div class="small">Filter, search and save articles</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="search">
+          <input id="searchInput" placeholder="Search articles, e.g. 'deforestation'" />
+          <button class="btn" id="clearSearch">Go</button>
+        </div>
+
+        <div class="filters">
+          <div class="small">Categories</div>
+          <div id="categoryList">
+            <!-- categories inserted here -->
+          </div>
+        </div>
+
+        <hr style="margin:12px 0;border:none;border-top:1px solid #eef4f4" />
+        <div class="small">Bookmarked</div>
+        <div id="bookmarks" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          <!-- saved articles -->
+        </div>
+      </aside>
+
+      <section>
+        <div class="controls">
+          <div class="left">
+            <div style="font-size:1.1rem;font-weight:700">Latest Environmental News</div>
+            <div class="small" style="margin-left:8px">Showing <span id="count">0</span> articles</div>
+          </div>
+          <div>
+            <select id="sortSelect" style="padding:8px;border-radius:8px;border:1px solid #e6eef0">
+              <option value="new">Newest</option>
+              <option value="old">Oldest</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:16px">
+          <div>
+            <div class="articles" id="articlesList">
+              <!-- articles inserted here -->
+            </div>
+          </div>
+
+          <div>
+            <div class="card chartcard">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div style="font-weight:700">Trends</div>
+                <div class="small">Category distribution</div>
+              </div>
+              <canvas id="trendChart" width="300" height="220"></canvas>
+            </div>
+
+            <div style="height:16px"></div>
+
+            <div class="card" style="padding:12px">
+              <div style="font-weight:700">Highlights</div>
+              <ul id="highlights" style="margin-top:8px"></ul>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </main>
+
+  <script>
+    // Mock data (in a real app this would be fetched from RSS / API)
+    const mockArticles = [
+      {id:1, title:'Tropical forests show signs of recovery in protected areas', summary:'New satellite analysis reveals regrowth in several protected zones after strict anti-logging enforcement.', category:'Forests', region:'Amazon', image:'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=800&q=60', date:'2025-11-28'},
+      {id:2, title:'Coastal cities invest in nature-based flood defenses', summary:'Several municipalities prioritize wetlands restoration and mangrove planting to reduce storm surge risks.', category:'Coasts', region:'Global', image:'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=60', date:'2025-12-01'},
+      {id:3, title:'Renewable energy jobs grow 12% worldwide', summary:'A rapidly expanding clean energy sector is creating jobs across manufacturing, installation and grid integration.', category:'Energy', region:'Global', image:'https://images.unsplash.com/photo-1509395176047-4a66953fd231?auto=format&fit=crop&w=800&q=60', date:'2025-11-20'},
+      {id:4, title:'Agriculture shifts towards regenerative practices', summary:'Pilot programs show soil carbon increases and crop resilience after switching to cover crops and reduced tillage.', category:'Agriculture', region:'Europe', image:'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60', date:'2025-10-15'},
+      {id:5, title:'Urban air quality improves with low-emission zones', summary:'Cities reporting lower NO2 and PM2.5 after implementing vehicle restrictions and promoting transit.', category:'Air', region:'Asia', image:'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60', date:'2025-12-06'},
+      {id:6, title:'Microplastics found in deep-sea organisms', summary:'Researchers detect microplastics in species previously thought isolated from surface pollution.', category:'Oceans', region:'Pacific', image:'https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=800&q=60', date:'2025-09-11'},
+      {id:7, title:'Community-led wetland restoration shows biodiversity gains', summary:'Local stewardship and native planting return birds and amphibians to restored marshes.', category:'Conservation', region:'Africa', image:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=60', date:'2025-11-02'}
+    ];
+
+    // App state
+    let articles = [...mockArticles];
+    let activeCategory = 'All';
+    let bookmarks = new Set(JSON.parse(localStorage.getItem('pp_bookmarks') || '[]'));
+
+    // Utilities
+    function formatDate(d){
+      const dt = new Date(d);
+      if(isNaN(dt)) return d;
+      return dt.toLocaleDateString();
+    }
+
+    // Render categories
+    function renderCategories(){
+      const container = document.getElementById('categoryList');
+      const cats = ['All', ...Array.from(new Set(articles.map(a=>a.category)))];
+      container.innerHTML='';
+      cats.forEach(c=>{
+        const el = document.createElement('div');
+        el.className='category '+(c===activeCategory?'active':'');
+        el.textContent = c;
+        el.onclick = ()=>{ activeCategory = c; render(); }
+        container.appendChild(el);
+      })
+    }
+
+    // Render bookmarks list
+    function renderBookmarks(){
+      const el = document.getElementById('bookmarks');
+      el.innerHTML='';
+      const saved = articles.filter(a=>bookmarks.has(a.id));
+      if(saved.length===0){ el.innerHTML='<div class="small">No bookmarks yet</div>'; return }
+      saved.forEach(s=>{
+        const div = document.createElement('div');
+        div.style.display='flex'; div.style.justifyContent='space-between'; div.style.alignItems='center';
+        div.innerHTML = `<div style="flex:1; margin-right:8px">${s.title}</div><button class="btn secondary" onclick="openArticle(${s.id})">Open</button>`;
+        el.appendChild(div);
+      })
+    }
+
+    // Open article (scroll to / highlight)
+    function openArticle(id){
+      const node = document.getElementById('article-'+id);
+      if(node){ node.scrollIntoView({behavior:'smooth', block:'center'}); node.animate([{background:'#fff2cc'},{background:'#fff'}],{duration:900}); }
+    }
+
+    // Render articles
+    function renderArticles(filtered){
+      const list = document.getElementById('articlesList');
+      const count = document.getElementById('count');
+      list.innerHTML='';
+      filtered.forEach(a=>{
+        const div = document.createElement('div'); div.className='article'; div.id='article-'+a.id;
+        div.innerHTML = `
+          <div class="thumb" style="background-image:url('${a.image}')"></div>
+          <div class="meta">
+            <h3>${a.title}</h3>
+            <p>${a.summary}</p>
+            <div class="metafoot">
+              <div class="chip">${a.category}</div>
+              <div>${a.region}</div>
+              <div>${formatDate(a.date)}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;justify-content:space-between">
+            <div class="star ${bookmarks.has(a.id)?'saved':''}" onclick="toggleBookmark(${a.id}, event)">★</div>
+            <button class="btn" onclick="summaryModal(${a.id})">Summary</button>
+          </div>
+        `;
+        list.appendChild(div);
+      })
+      count.textContent = filtered.length;
+    }
+
+    // Toggle bookmark
+    function toggleBookmark(id, ev){
+      ev && ev.stopPropagation();
+      if(bookmarks.has(id)) bookmarks.delete(id); else bookmarks.add(id);
+      localStorage.setItem('pp_bookmarks', JSON.stringify(Array.from(bookmarks)));
+      render();
+    }
+    window.toggleBookmark = toggleBookmark;
+
+    // Modal-like summary (simple prompt style)
+    function summaryModal(id){
+      const a = articles.find(x=>x.id===id);
+      if(!a) return;
+      alert('Summary for: ' + a.title + '\n\n' + a.summary + '\n\nCategory: '+a.category+' | Region: '+a.region+' | Date: '+formatDate(a.date));
+    }
+    window.summaryModal = summaryModal;
+
+    // Filtering + search
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const sort = document.getElementById('sortSelect').value;
+      let filtered = articles.filter(a=>{
+        if(activeCategory!=='All' && a.category!==activeCategory) return false;
+        if(q){ return (a.title+a.summary+a.category+a.region).toLowerCase().includes(q); }
+        return true;
+      });
+      if(sort==='new') filtered.sort((a,b)=> new Date(b.date)-new Date(a.date)); else filtered.sort((a,b)=> new Date(a.date)-new Date(b.date));
+      return filtered;
+    }
+
+    // Trend chart
+    let chart = null;
+    function renderChart(){
+      const ctx = document.getElementById('trendChart');
+      const counts = {};
+      articles.forEach(a=> counts[a.category] = (counts[a.category]||0)+1 );
+      const labels = Object.keys(counts);
+      const data = Object.values(counts);
+      if(chart) chart.destroy();
+      chart = new Chart(ctx,{
+        type:'doughnut',
+        data:{labels, datasets:[{data, backgroundColor:[]}]},
+        options:{plugins:{legend:{position:'bottom'}}}
+      });
+    }
+
+    // Highlights (simple top summaries)
+    function renderHighlights(){
+      const ul = document.getElementById('highlights'); ul.innerHTML='';
+      const top = articles.slice(0,4);
+      top.forEach(t=>{ const li = document.createElement('li'); li.textContent = t.title; ul.appendChild(li); })
+    }
+
+    // Main render
+    function render(){
+      renderCategories();
+      const filtered = applyFilters();
+      renderArticles(filtered);
+      renderBookmarks();
+      renderChart();
+      renderHighlights();
+    }
+
+    // Wiring
+    document.getElementById('searchInput').addEventListener('input', ()=>render());
+    document.getElementById('clearSearch').addEventListener('click', ()=>{ render(); });
+    document.getElementById('sortSelect').addEventListener('change', ()=>render());
+    document.getElementById('refreshBtn').addEventListener('click', ()=>{ alert('Simulated refresh — in a real app this would fetch new RSS/feeds.'); });
+
+    // Initialize
+    render();
+
+  </script>
+
+  <footer style="text-align:center;padding:18px 0;color:var(--muted)">Built with ♻️ • PlanetPulse demo • Single-file HTML/CSS/JS</footer>
+</body>
+</html>
